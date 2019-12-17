@@ -4,6 +4,8 @@ library(magrittr)
 library(dplyr)
 library(stats)
 library(utils)
+library(effects)
+library(ggplot2)
 
 ### Options ###
 
@@ -156,6 +158,30 @@ if (do_load == 0) {
     
     cps_data$educ_yrs <- educ
     
+    
+    ## 2nd approach: Education as categorial
+    
+    
+    # Recast educational attainnment to less categories
+    recast_educ <- cps_data %>% 
+        select(EDUC) %>%
+        mutate(education = factor(ifelse(EDUC == 0 | EDUC == 1 | EDUC == 2 | EDUC == 10 |
+                                             EDUC == 11 | EDUC == 12 | EDUC == 13 | EDUC == 14,'pre-school dropout',
+                                         ifelse(EDUC == 20 | EDUC ==  21 | EDUC == 22 | EDUC == 30 | EDUC == 31 |
+                                                    EDUC == 32 | EDUC == 32 | EDUC == 40 | EDUC ==  50 | EDUC == 60 | 
+                                                    EDUC == 70 | EDUC ==  71 | EDUC == 72, 'High-School dropout',
+                                                ifelse(EDUC == 73, 'High-School Grad',
+                                                       ifelse(EDUC == 80 | EDUC == 81 | EDUC ==  90 | EDUC == 91 | EDUC == 92 |
+                                                                  EDUC == 100 | EDUC == 110, 'Associate\'s degree / College dropout',
+                                                              ifelse(EDUC == 111 | EDUC == 120 | EDUC == 121 | EDUC == 122, 'Bachelor Degree',
+                                                                     ifelse(EDUC == 123 | EDUC == 124, 'Master Degree','PhD')))))),
+                                  levels = c('High-School Grad','pre-school dropout','High-School dropout','Associate\'s degree / College dropout',
+                                             'Bachelor Degree','Master Degree','PhD')))
+    
+    # Note: High-School Grad is the reference category
+    
+    cps_data$education <- recast_educ$education   
+    
     ### Other variables ### 
     
     # Personal nonearned income #
@@ -202,18 +228,33 @@ cps_adults$potexp <- apply(data.frame(as.numeric(cps_adults$AGE - cps_adults$edu
 
 
 
+
+# Convert indicators into factors
+cps_adults$i_partic <- factor(cps_adults$i_partic)
+cps_adults$i_chldb6 <- factor(cps_adults$i_chldb6)
+cps_adults$i_white <- factor(cps_adults$i_white)
+cps_adults$i_female <- factor(cps_adults$i_female)
+
+
+# Convert categorial into numeric
+cps_adults$nchld1 <- as.numeric(cps_adults$nchld1)
+cps_adults$nchld6 <- as.numeric(cps_adults$nchld6)
+cps_adults$nchld18 <- as.numeric(cps_adults$nchld18)
+cps_adults$nchldtot <- as.numeric(cps_adults$nchldtot)
+cps_adults$AGE <- as.numeric(cps_adults$AGE)
+
+
 ## Run Probit on Participation
 particprob <- stats::glm(i_partic ~ nchldtot*i_chldb6*i_female  + nonearninc + 
-                  other_faminc + potexp + educ_yrs + i_white, family = binomial(link = 'probit'), 
+                  other_faminc + potexp + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
                 data = cps_adults)
 
 particprob2 <- stats::glm(i_partic ~ nchld1*i_female + nchld6*i_female + nchld18*i_female  + nonearninc + 
-                             other_faminc + potexp + poly(AGE,2) + educ_yrs + i_white, family = binomial(link = 'probit'), 
+                             other_faminc + potexp + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
                          data = cps_adults)
 
 
 print(summary(particprob))
 print(summary(particprob2))
 
-
-cor(cps_adults[,c('i_partic','nchld1','nchld6','nchld18','i_female','i_white','nonearninc','other_faminc','potexp','AGE','educ_yrs')])
+    
