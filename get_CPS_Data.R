@@ -214,6 +214,6 @@ particprob2 <- stats::glm(i_partic ~ nchld1*i_female + nchld6*i_female + nchld18
 
 print(summary(particprob))
 print(summary(particprob2))
-print(summary(particprob_nointeraction))
+
 
 cor(cps_adults[,c('i_partic','nchld1','nchld6','nchld18','i_female','i_white','nonearninc','other_faminc','potexp','AGE','educ_yrs')])
