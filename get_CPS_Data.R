@@ -15,11 +15,12 @@ setwd(this.dir)
 
 do_save <- 0    # If 1 saves manipulated data set
 do_load <- 1    # If 1 loads data set from source file location, put 0 to (re-)calculate number of children and family income
+do_write <- 1   # If 1 writes csv data set with calculated participation probailities
 
 ### Fetch Data ### 
 
-cps_ddi_file = 'cps_00004.xml'
-cps_data_file = 'cps_00004.dat'
+cps_ddi_file = '../CodeAndData/cps_00004.xml'
+cps_data_file = '../CodeAndData/cps_00004.dat'
 
 cps_ddi <- read_ipums_ddi(cps_ddi_file)
 cps_data <- read_ipums_micro(cps_ddi_file, data_file = cps_data_file)
@@ -170,12 +171,11 @@ if (do_load == 0) {
                                          ifelse(EDUC == 20 | EDUC ==  21 | EDUC == 22 | EDUC == 30 | EDUC == 31 |
                                                     EDUC == 32 | EDUC == 32 | EDUC == 40 | EDUC ==  50 | EDUC == 60 | 
                                                     EDUC == 70 | EDUC ==  71 | EDUC == 72, 'High-School dropout',
-                                                ifelse(EDUC == 73, 'High-School Grad',
-                                                       ifelse(EDUC == 80 | EDUC == 81 | EDUC ==  90 | EDUC == 91 | EDUC == 92 |
-                                                                  EDUC == 100 | EDUC == 110, 'Associate\'s degree / College dropout',
+                                                ifelse(EDUC == 73 | EDUC == 80 | EDUC == 81 | EDUC ==  90 | EDUC == 91 | EDUC == 92 |
+                                                        EDUC == 100 | EDUC == 110,'High-School Grad',
                                                               ifelse(EDUC == 111 | EDUC == 120 | EDUC == 121 | EDUC == 122, 'Bachelor Degree',
-                                                                     ifelse(EDUC == 123 | EDUC == 124, 'Master Degree','PhD')))))),
-                                  levels = c('High-School Grad','pre-school dropout','High-School dropout','Associate\'s degree / College dropout',
+                                                                     ifelse(EDUC == 123 | EDUC == 124, 'Master Degree','PhD'))))),
+                                  levels = c('High-School Grad','pre-school dropout','High-School dropout',
                                              'Bachelor Degree','Master Degree','PhD')))
     
     # Note: High-School Grad is the reference category
@@ -190,7 +190,7 @@ if (do_load == 0) {
     # Participation Indicator 'Has worked for Pay'
     
     i_partic <- numeric(length= dim(cps_data)[1])
-    i_partic[cps_data[,'INCWAGE'] > 0] <- 1
+    i_partic[cps_data[,'INCWAGE'] > 1000] <- 1
     
     cps_data$i_partic <- i_partic
     
@@ -219,7 +219,7 @@ if (do_load == 0) {
 
 
 ## Keep only adults between 18 and 64
-cps_adults <- cps_data[!(cps_data$AGE < 18 | cps_data$AGE > 64),] 
+cps_adults <- cps_data[!(cps_data$AGE < 24 | cps_data$AGE > 55),] 
 
 # Potential Experience
 # Calculate as min{AGE - years_of_educ - 6; AGE - 18}
@@ -245,16 +245,33 @@ cps_adults$AGE <- as.numeric(cps_adults$AGE)
 
 
 ## Run Probit on Participation
-particprob <- stats::glm(i_partic ~ nchldtot*i_chldb6*i_female  + nonearninc + 
-                  other_faminc + potexp + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
+particprob <- glm(i_partic ~ nchldtot*i_chldb6*i_female  + nonearninc + 
+                  other_faminc + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
                 data = cps_adults)
 
 particprob2 <- stats::glm(i_partic ~ nchld1*i_female + nchld6*i_female + nchld18*i_female  + nonearninc + 
-                             other_faminc + potexp + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
+                             other_faminc  + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
+                         data = cps_adults)
+
+particprob3 <- stats::glm(i_partic ~ nchldtot + i_chldb6 + i_female  + nonearninc + 
+                             other_faminc + potexp + AGE + education + i_white, family = binomial(link = 'probit'), 
                          data = cps_adults)
 
 
 print(summary(particprob))
 print(summary(particprob2))
+print(summary(particprob3))
 
+# Append fitted probit values to dataset
+cps_adults$pZ <- particprob$fitted.values
+
+# Save data set
+if (do_write == 1) {
+    
+    write.csv(cps_adults,file = 'cps_adults.csv')
+}
+
+y <- predict(particprob, newdata = data.frame('nchldtot' = c(2,2), 'i_chldb6' = factor(c(1,1)),'i_female' =factor(c(0,0)),'nonearninc' = c(10000,10000),
+                                              'other_faminc' = c(10000,10000),'potexp' = c(5,5), 'AGE' = c(33,33),
+                                              'education' = c('High-School Grad','Bachelor Degree'), 'i_white' = factor(c(1,1))))
     
