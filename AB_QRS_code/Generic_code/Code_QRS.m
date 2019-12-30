@@ -37,10 +37,24 @@ nchld6 = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchld
 nchld18 = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchld18')};
 nchldtot = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchldtot')};
 age = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'AGE')};
+age2 = age.^2;
 potexp = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'potexp')};
 
-X = [i_female, i_white, age, potexp];
-B = [other_faminc, nonearninc, nchld1, nchld6, nchld18];
+% Dummies
+educ_preSchool = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_pre_school')};
+educ_HighSchoolD = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_High_School')};
+educ_Bachelor = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_Bachelor')};
+educ_Master = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_Master')};
+educ_PhD = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_PhD')};
+
+
+% Interactions
+fem_nchld1 = nchld1 .* i_female;
+fem_nchld6 = nchld6 .* i_female;
+fem_nchld18 = nchld18 .* i_female;
+
+X = [i_female, i_white, age, age2, educ_preSchool, educ_HighSchoolD, educ_Bachelor, educ_Master, educ_PhD];
+B = [other_faminc, nonearninc, nchld1, nchld6, nchld18, fem_nchld1, fem_nchld6, fem_nchld18];
 
 Z = [X B];
 % propensity score
@@ -48,6 +62,10 @@ pZ = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'pZ')};
 
 % participation indicator
 D = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_partic')}));
+
+% Re estimate participation
+gamma=glmfit(Z,D,'binomial','link','probit');
+pZ_est =normcdf(gamma(1)+Z*gamma(2:end));
 
 % Observed Wage
 Y = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'INCWAGE')};

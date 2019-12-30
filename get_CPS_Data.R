@@ -5,7 +5,7 @@ library(dplyr)
 library(stats)
 library(utils)
 library(effects)
-library(ggplot2)
+library(fastDummies)
 
 ### Options ###
 
@@ -15,12 +15,12 @@ setwd(this.dir)
 
 do_save <- 0    # If 1 saves manipulated data set
 do_load <- 1    # If 1 loads data set from source file location, put 0 to (re-)calculate number of children and family income
-do_write <- 1   # If 1 writes csv data set with calculated participation probailities
+do_write <- 0   # If 1 writes csv data set with calculated participation probailities
 
 ### Fetch Data ### 
 
-cps_ddi_file = '../CodeAndData/cps_00004.xml'
-cps_data_file = '../CodeAndData/cps_00004.dat'
+cps_ddi_file = '../CodeAndData/cps_00005.xml'
+cps_data_file = '../CodeAndData/cps_00005.dat'
 
 cps_ddi <- read_ipums_ddi(cps_ddi_file)
 cps_data <- read_ipums_micro(cps_ddi_file, data_file = cps_data_file)
@@ -34,7 +34,7 @@ if (do_load == 0) {
 
     
     # Keep only relevant variables
-    cps_data <- cps_data[,c('SERIAL','PERNUM','MOMLOC','MOMLOC2','POPLOC','POPLOC2','AGE','FAMUNIT','INCTOT','INCWAGE','EDUC','SEX','RACE')]
+    cps_data <- cps_data[,c('SERIAL','PERNUM','MOMLOC','MOMLOC2','POPLOC','POPLOC2','AGE','FAMUNIT','INCTOT','INCWAGE','EDUC','SEX','RACE','ASECWT','CLASSWKR')]
     
     ### Calculate for each person the number of children following IPUMS definition ###
     
@@ -167,16 +167,16 @@ if (do_load == 0) {
     recast_educ <- cps_data %>% 
         select(EDUC) %>%
         mutate(education = factor(ifelse(EDUC == 0 | EDUC == 1 | EDUC == 2 | EDUC == 10 |
-                                             EDUC == 11 | EDUC == 12 | EDUC == 13 | EDUC == 14,'pre-school dropout',
-                                         ifelse(EDUC == 20 | EDUC ==  21 | EDUC == 22 | EDUC == 30 | EDUC == 31 |
+                                             EDUC == 11 | EDUC == 12 | EDUC == 13 | EDUC == 14 |
+                                                EDUC == 20 | EDUC ==  21 | EDUC == 22 | EDUC == 30 | EDUC == 31 |
                                                     EDUC == 32 | EDUC == 32 | EDUC == 40 | EDUC ==  50 | EDUC == 60 | 
-                                                    EDUC == 70 | EDUC ==  71 | EDUC == 72, 'High-School dropout',
+                                                    EDUC == 70 | EDUC ==  71 | EDUC == 72, 'High-School',
                                                 ifelse(EDUC == 73 | EDUC == 80 | EDUC == 81 | EDUC ==  90 | EDUC == 91 | EDUC == 92 |
-                                                        EDUC == 100 | EDUC == 110,'High-School Grad',
-                                                              ifelse(EDUC == 111 | EDUC == 120 | EDUC == 121 | EDUC == 122, 'Bachelor Degree',
-                                                                     ifelse(EDUC == 123 | EDUC == 124, 'Master Degree','PhD'))))),
-                                  levels = c('High-School Grad','pre-school dropout','High-School dropout',
-                                             'Bachelor Degree','Master Degree','PhD')))
+                                                        EDUC == 100 | EDUC == 110,'High-School-Grad',
+                                                              ifelse(EDUC == 111 | EDUC == 120 | EDUC == 121 | EDUC == 122, 'Bachelor',
+                                                                      'Master'))),
+                                  levels = c('High-School-Grad','High-School',
+                                             'Bachelor','Master')))
     
     # Note: High-School Grad is the reference category
     
@@ -219,7 +219,7 @@ if (do_load == 0) {
 
 
 ## Keep only adults between 18 and 64
-cps_adults <- cps_data[!(cps_data$AGE < 24 | cps_data$AGE > 55),] 
+cps_adults <- cps_data[!(cps_data$AGE < 18 | cps_data$AGE > 64),] 
 
 # Potential Experience
 # Calculate as min{AGE - years_of_educ - 6; AGE - 18}
@@ -227,10 +227,8 @@ cps_adults$potexp <- apply(data.frame(as.numeric(cps_adults$AGE - cps_adults$edu
                            as.numeric(cps_adults$AGE -18)),1,FUN=min)
 
 
-
-
 # Convert indicators into factors
-cps_adults$i_partic <- factor(cps_adults$i_partic)
+# cps_adults$i_partic <- factor(cps_adults$i_partic)
 cps_adults$i_chldb6 <- factor(cps_adults$i_chldb6)
 cps_adults$i_white <- factor(cps_adults$i_white)
 cps_adults$i_female <- factor(cps_adults$i_female)
@@ -243,13 +241,33 @@ cps_adults$nchld18 <- as.numeric(cps_adults$nchld18)
 cps_adults$nchldtot <- as.numeric(cps_adults$nchldtot)
 cps_adults$AGE <- as.numeric(cps_adults$AGE)
 
+## Drop observations according to income thresholds ## 
+cps_adults <- cps_adults[cps_adults$nonearninc >= 0,] 
+cps_adults <- cps_adults[cps_adults$other_faminc >= 0,] 
+
+cps_adults <- cps_adults[cps_adults$nonearninc < quantile(cps_adults$nonearninc,0.99),]
+cps_adults <- cps_adults[cps_adults$other_faminc < quantile(cps_adults$other_faminc,0.99),]
+
+## Drop self-employed ##
+cps_adults <- cps_adults[!(cps_adults$CLASSWKR == 10 | cps_adults$CLASSWKR == 13 | 
+                               cps_adults$CLASSWKR == 14),]
+
+
+## Inverse Hyperbolic Sine Transformation on Incomes
+cps_adults$ihs_nonearninc <- log(cps_adults$nonearninc + (1 + cps_adults$nonearninc^2)^(1/2))
+cps_adults$ihs_otherfaminc <- log(cps_adults$other_faminc + (1 + cps_adults$other_faminc^2)^(1/2))
+
 
 ## Run Probit on Participation
-particprob <- glm(i_partic ~ nchldtot*i_chldb6*i_female  + nonearninc + 
-                  other_faminc + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
+particprob <- stats::glm(i_partic ~ i_chldb6*i_female + ihs_nonearninc + ihs_otherfaminc + poly(AGE,2) + 
+                             education + i_white, family = binomial(link = 'probit'), 
                 data = cps_adults)
 
-particprob2 <- stats::glm(i_partic ~ nchld1*i_female + nchld6*i_female + nchld18*i_female  + nonearninc + 
+particlogit <- stats::glm(i_partic ~ i_chldb6*i_female + nonearninc + other_faminc + poly(AGE,2) + 
+                              education + i_white, family = binomial(link = 'logit'), 
+                          data = cps_adults)
+
+particprob2 <- stats::glm(i_partic ~ i_female + nchld1 + nchld1:i_female + nchld6 + nchld6:i_female + nchld18 + nchld18:i_female  + nonearninc + 
                              other_faminc  + poly(AGE,2) + education + i_white, family = binomial(link = 'probit'), 
                          data = cps_adults)
 
@@ -265,13 +283,68 @@ print(summary(particprob3))
 # Append fitted probit values to dataset
 cps_adults$pZ <- particprob$fitted.values
 
+# Create Dummy Columns for Matlab
+cps_adults <- fastDummies::dummy_cols(cps_adults,select_columns = 'education')
+
 # Save data set
 if (do_write == 1) {
     
     write.csv(cps_adults,file = 'cps_adults.csv')
 }
 
-y <- predict(particprob, newdata = data.frame('nchldtot' = c(2,2), 'i_chldb6' = factor(c(1,1)),'i_female' =factor(c(0,0)),'nonearninc' = c(10000,10000),
-                                              'other_faminc' = c(10000,10000),'potexp' = c(5,5), 'AGE' = c(33,33),
-                                              'education' = c('High-School Grad','Bachelor Degree'), 'i_white' = factor(c(1,1))))
-    
+
+
+# Data Exploration
+
+print(cps_adults %>% group_by(CLASSWKR,education) %>% summarise(obs = n()))
+print(cps_adults %>% group_by(i_partic) %>% summarise(min_nonearninc = min(nonearninc),max_nonearninc = max(nonearninc),
+                                                      min_other_faminc = min(other_faminc),max_other_faminc = max(other_faminc)))
+
+# Plot 
+plot(x=cps_adults$ihs_nonearninc,
+     pch = 20,
+     y = cps_adults$i_partic,
+     ylim = c(-0.4,1.4),
+     cex.main = 0.9)
+
+
+# Add estimated regression line for nonearninc
+x1 <- seq(0,max(cps_adults$ihs_nonearninc),0.1)
+y1<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(1,length(x1))),
+                                    ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
+                                    AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
+                                    i_white = factor(rep(1,length(x1)))),
+            type='response')
+
+y2<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(1,length(x1))),
+                                             ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
+                                             AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
+                                             i_white = factor(rep(1,length(x1)))),
+             type='response')
+
+y3<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(0,length(x1))),
+                                             ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
+                                             AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
+                                             i_white = factor(rep(1,length(x1)))),
+             type='response')
+
+lines(x1, y1, lwd = 1.5, col = "steelblue")
+lines(x1, y2, lwd = 1.5, col = "red")
+lines(x1, y3, lwd = 1.5, col = "green")
+
+# Add horizontal dashed line and text
+abline(h = 1, lty = 2, col = "darkred")
+abline(h = 0, lty = 2, col = "darkred")
+text(max(x1), 0.9, cex = 0.5, "Working for wage")
+text(max(x1), -0.1, cex= 0.5, "Not working for wage")
+
+
+# Add legend
+legend('topleft',
+       horiz = TRUE,
+       legend=c('Female and child below 6','Female, no child below 6','male,no child below 6'),
+       col = c('steelblue','red','green'),
+       lty = c(1,1,1),
+       cex = 0.5)
+
+
