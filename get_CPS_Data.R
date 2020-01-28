@@ -17,8 +17,8 @@ library(fastDummies)
         this.dir <- dirname(parent.frame(2)$ofile)
         setwd(this.dir)
         
-        do_save <- 1    # If 1 saves manipulated data set
-        do_load <- 0    # If 1 loads data set from source file location, put 0 to (re-)calculate number of children and family income
+        do_save <- 0    # If 1 saves manipulated data set
+        do_load <- 1    # If 1 loads data set from source file location, put 0 to (re-)calculate number of children and family income
         do_write <- 1   # If 1 writes csv data set with calculated participation probabilities
 
 ################################################################################     
