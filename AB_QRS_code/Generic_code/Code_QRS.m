@@ -23,12 +23,18 @@
 % gamma=glmfit(Z,D,'binomial','link','probit');
 % pZ=normcdf(gamma(1)+Z*gamma(2:end));
 
-%%% Load R manipulated data incl. propensity score
+%% Housekeeping
+clc
+clear all
+close all
+
+
+%% Load R manipulated data incl. propensity score
 cps_adults = readtable('../../cps_adults.csv');
 
 % Covariates
-other_faminc = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'other_faminc')};
-nonearninc = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nonearninc')};
+ihs_other_faminc = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'ihs_otherfaminc')};
+ihs_nonearninc = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'ihs_nonearninc')};
 i_chldb6 = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_chldb6')}));
 i_female = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_female')}));
 i_white = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_white')}));
@@ -39,36 +45,38 @@ nchldtot = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nch
 age = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'AGE')};
 age2 = age.^2;
 potexp = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'potexp')};
+potexp2 = potexp.^2;
 
 % Dummies
-educ_preSchool = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_pre_school')};
-educ_HighSchoolD = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_High_School')};
+educ_NoHighSchool = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_NoHighSchool')};
+educ_HighSchool = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_HighSchoolGrad')};
 educ_Bachelor = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_Bachelor')};
 educ_Master = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_Master')};
-educ_PhD = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'education_PhD')};
 
 
 % Interactions
+fem_ichldb6 = i_chldb6 .* i_female;
+
 fem_nchld1 = nchld1 .* i_female;
 fem_nchld6 = nchld6 .* i_female;
 fem_nchld18 = nchld18 .* i_female;
 
-X = [i_female, i_white, age, age2, educ_preSchool, educ_HighSchoolD, educ_Bachelor, educ_Master, educ_PhD];
-B = [other_faminc, nonearninc, nchld1, nchld6, nchld18, fem_nchld1, fem_nchld6, fem_nchld18];
+X = [i_female, educ_NoHighSchool, educ_Bachelor, educ_Master, i_white, potexp, potexp2];
+B = [ihs_other_faminc, ihs_nonearninc, i_chldb6, fem_ichldb6];
 
 Z = [X B];
 % propensity score
 pZ = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'pZ')};
 
 % participation indicator
-D = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_partic')}));
+D = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_partic')};
 
 % Re estimate participation
 gamma=glmfit(Z,D,'binomial','link','probit');
 pZ_est =normcdf(gamma(1)+Z*gamma(2:end));
 
 % Observed Wage
-Y = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'INCWAGE')};
+Y = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'ihs_incwage')};
 
 %%% Instrument function
 varphi=pZ;
@@ -130,3 +138,14 @@ display('quantile coefficients')
 beta
 %%% Note: the first column in beta corresponds to the intercept. 
 %%% different columns are tau=.05 to tau=.95
+varnames = {'(Intercept)','female', 'educ_NoHighSchool', 'educ_Bachelor', ...
+    'educ_Master', 'white', 'potexp', 'potexp2'};
+
+
+T_beta = array2table(beta','VariableNames',varnames)
+writetable(T_beta,'../../corrected_quantreg_beta.txt')
+
+%% Plots %%
+
+fig1 = figure(1);
+bar(beta(4,:))
