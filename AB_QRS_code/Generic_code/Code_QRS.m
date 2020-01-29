@@ -38,12 +38,6 @@ ihs_nonearninc = cps_adults{:,find(string(cps_adults.Properties.VariableNames) =
 i_chldb6 = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_chldb6')}));
 i_female = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_female')}));
 i_white = str2num(cell2mat(cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_white')}));
-nchld1 = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchld1')};
-nchld6 = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchld6')};
-nchld18 = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchld18')};
-nchldtot = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'nchldtot')};
-age = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'AGE')};
-age2 = age.^2;
 potexp = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'potexp')};
 potexp2 = potexp.^2;
 
@@ -56,10 +50,6 @@ educ_Master = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == '
 
 % Interactions
 fem_ichldb6 = i_chldb6 .* i_female;
-
-fem_nchld1 = nchld1 .* i_female;
-fem_nchld6 = nchld6 .* i_female;
-fem_nchld18 = nchld18 .* i_female;
 
 X = [i_female, educ_NoHighSchool, educ_Bachelor, educ_Master, i_white, potexp, potexp2];
 B = [ihs_other_faminc, ihs_nonearninc, i_chldb6, fem_ichldb6];
@@ -74,6 +64,9 @@ D = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'i_partic')
 % Re estimate participation
 gamma=glmfit(Z,D,'binomial','link','probit');
 pZ_est =normcdf(gamma(1)+Z*gamma(2:end));
+
+% Check estimates do not vary too much
+assert(~any(abs(pZ-pZ_est) > 1e-06), 'Discrepancy between given pZ and re-estimated pZ')
 
 % Observed Wage
 Y = cps_adults{:,find(string(cps_adults.Properties.VariableNames) == 'ihs_incwage')};
@@ -141,11 +134,7 @@ beta
 varnames = {'(Intercept)','female', 'educ_NoHighSchool', 'educ_Bachelor', ...
     'educ_Master', 'white', 'potexp', 'potexp2'};
 
-
+% Save output coefficients (betas)
 T_beta = array2table(beta','VariableNames',varnames)
 writetable(T_beta,'../../corrected_quantreg_beta.txt')
 
-%% Plots %%
-
-fig1 = figure(1);
-bar(beta(4,:))

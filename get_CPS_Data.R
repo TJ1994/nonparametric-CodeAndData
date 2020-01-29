@@ -82,25 +82,13 @@ library(fastDummies)
             
         }
         
-        # No of children between 0 and 1
-        nchld1 <- {cps_data  %>% group_split(SERIAL) %>% purrr::map_dfr(nchild_func,age_above = -1,age_below = 1)}$nchld
-        
-        # No of children between 1 and 6
-        nchld6 <- {cps_data  %>% group_split(SERIAL) %>% purrr::map_dfr(nchild_func,age_above = 1,age_below = 6)}$nchld
-        
-        # No of children between 6 and 18
-        nchld18 <- {cps_data  %>% group_split(SERIAL) %>% purrr::map_dfr(nchild_func,age_above = 6,age_below = 18)}$nchld
-        
-        
+        # No of children between 0 and 6
+        nchld6 <- {cps_data  %>% group_split(SERIAL) %>% purrr::map_dfr(nchild_func,age_above = -1,age_below = 6)}$nchld
+
         
         # Append to dataframe
-        cps_data$nchld1 <- nchld1
         cps_data$nchld6 <- nchld6
-        cps_data$nchld18 <- nchld18
-        
-        # Total number of children
-        cps_data$nchldtot <- cps_data$nchld1 + cps_data$nchld6 + cps_data$nchld18
-    
+
         ################################################################################
         
         ### Calculate Family Income as sum of INCTOT of family members (following IPUMS Family definition) ###
@@ -188,12 +176,12 @@ library(fastDummies)
                                                  EDUC == 11 | EDUC == 12 | EDUC == 13 | EDUC == 14 |
                                                     EDUC == 20 | EDUC ==  21 | EDUC == 22 | EDUC == 30 | EDUC == 31 |
                                                         EDUC == 32 | EDUC == 32 | EDUC == 40 | EDUC ==  50 | EDUC == 60 | 
-                                                        EDUC == 70 | EDUC ==  71 | EDUC == 72, 'High-School',
+                                                        EDUC == 70 | EDUC ==  71 | EDUC == 72, 'NoHighSchool',
                                                     ifelse(EDUC == 73 | EDUC == 80 | EDUC == 81 | EDUC ==  90 | EDUC == 91 | EDUC == 92 |
-                                                            EDUC == 100 | EDUC == 110,'High-School-Grad',
+                                                            EDUC == 100 | EDUC == 110,'HighSchoolGrad',
                                                                   ifelse(EDUC == 111 | EDUC == 120 | EDUC == 121 | EDUC == 122, 'Bachelor',
                                                                           'Master'))),
-                                      levels = c('High-School-Grad','High-School',
+                                      levels = c('HighSchoolGrad','NoHighSchool',
                                                  'Bachelor','Master')))
         
         # Note: High-School Grad is the reference category
@@ -209,7 +197,7 @@ library(fastDummies)
         
        
         # Dummy for children below 6
-        cps_data$i_chldb6 <- as.numeric(cps_data$nchld6 > 0 | cps_data$nchld1 >0)
+        cps_data$i_chldb6 <- as.numeric(cps_data$nchld6 > 0)
         
         # Female Dummy
         female <- numeric(length= dim(cps_data)[1])
@@ -236,22 +224,22 @@ library(fastDummies)
 ### Define sample ###
 ################################################################################
 
-    ## Keep only adults between 18 and 64
-        cps_adults <- cps_data[!(cps_data$AGE < 18 | cps_data$AGE > 64),] 
+    ## Keep only adults between 20 and 64
+        cps_adults <- cps_data[!(cps_data$AGE < 20 | cps_data$AGE > 64),] 
     
     # Buchinsky (2001) Participation Indicator:
     # Has worked for at least 2 weeks and has positive income
         i_partic <- numeric(length= dim(cps_adults)[1])
         i_partic[cps_adults[,'WKSWORK1']>2 & cps_adults[,'INCWAGE'] > 0] <- 1
         
-        cps_data$i_partic <- i_partic
+        cps_adults$i_partic <- i_partic
         
     # Participation Indicator 'Has worked for Pay'
     
         i_partic_pay <- numeric(length= dim(cps_adults)[1])
         i_partic_pay[cps_adults[,'INCWAGE'] >= 10000] <- 1
         
-        cps_data$i_partic_pay <- i_partic_pay
+        cps_adults$i_partic_pay <- i_partic_pay
         
     # Participation Indicator 'Has worked more than 35h last week'
         i_partic_hrs <- numeric(length= dim(cps_adults)[1])
@@ -265,6 +253,8 @@ library(fastDummies)
         cps_adults$potexp <- apply(data.frame(as.numeric(cps_adults$AGE - cps_adults$educ_yrs - 6), 
                                    as.numeric(cps_adults$AGE -18)),1,FUN=min)
         
+        cps_adults$potexp2 <- cps_adults$potexp **2
+        
 ################################################################################
 ### Data conversion ###
 ################################################################################
@@ -277,10 +267,7 @@ library(fastDummies)
     
     
     # Convert categorial into numeric
-        cps_adults$nchld1 <- as.numeric(cps_adults$nchld1)
         cps_adults$nchld6 <- as.numeric(cps_adults$nchld6)
-        cps_adults$nchld18 <- as.numeric(cps_adults$nchld18)
-        cps_adults$nchldtot <- as.numeric(cps_adults$nchldtot)
         cps_adults$AGE <- as.numeric(cps_adults$AGE)
         
         
@@ -312,25 +299,13 @@ library(fastDummies)
 ################################################################################        
     
     ## Run Probit on Participation
-        particprob <- stats::glm(i_partic ~ i_chldb6*i_female + ihs_nonearninc + ihs_otherfaminc + poly(AGE,2) + 
-                                     education + i_white, family = binomial(link = 'probit'), 
+        particprob <- stats::glm(i_partic ~ i_chldb6*i_female + ihs_nonearninc + ihs_otherfaminc + 
+                                     potexp + potexp2 + education + i_white, 
+                                 family = binomial(link = 'probit'), 
                         data = cps_adults)
         
-        particlogit <- stats::glm(i_partic ~ i_chldb6*i_female + nonearninc + other_faminc + poly(AGE,2) + 
-                                      education + i_white, family = binomial(link = 'logit'), 
-                                  data = cps_adults)
-        
-        particprob2 <- stats::glm(i_partic ~ i_chldb6*i_female + nonearninc + other_faminc + poly(AGE,2) + 
-                                     education + i_white, family = binomial(link = 'probit'), 
-                                 data = cps_adults)
-        
-        particprob3 <- stats::glm(i_partic_hrs ~ i_chldb6*i_female + nonearninc + other_faminc + poly(AGE,2) + 
-                                      education + i_white, family = binomial(link = 'probit'), 
-                                  data = cps_adults)
-        
-        
+
         print(summary(particprob))
-        print(summary(particprob3))
     
 ################################################################################
     
@@ -362,105 +337,105 @@ library(fastDummies)
 ### Plots ###
 ################################################################################
         
-    # Plot ihs_nonearninc
-        plot(x=cps_adults$ihs_nonearninc,
-             pch = 20,
-             y = cps_adults$i_partic,
-             ylim = c(-0.4,1.4),
-             cex.main = 0.9)
-    
-    
-    # Add estimated regression line for nonearninc
-        x1 <- seq(0,max(cps_adults$ihs_nonearninc),0.1)
-        y1<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(1,length(x1))),
-                                            ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
-                                            AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                            i_white = factor(rep(1,length(x1)))),
-                    type='response')
-    
-        y2<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(1,length(x1))),
-                                                     ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
-                                                     AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                                     i_white = factor(rep(1,length(x1)))),
-                     type='response')
-        
-        y3<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(0,length(x1))),
-                                                     ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
-                                                     AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                                     i_white = factor(rep(1,length(x1)))),
-                     type='response')
-        
-        lines(x1, y1, lwd = 1.5, col = "steelblue")
-        lines(x1, y2, lwd = 1.5, col = "red")
-        lines(x1, y3, lwd = 1.5, col = "green")
-    
-    # Add horizontal dashed line and text
-        abline(h = 1, lty = 2, col = "darkred")
-        abline(h = 0, lty = 2, col = "darkred")
-        text(max(x1), 0.9, cex = 0.5, "Working for wage")
-        text(max(x1), -0.1, cex= 0.5, "Not working for wage")
-    
-    
-    # Add legend
-        legend('topleft',
-               horiz = TRUE,
-               legend=c('Female and child below 6','Female, no child below 6','male,no child below 6'),
-               col = c('steelblue','red','green'),
-               lty = c(1,1,1),
-               cex = 0.5)
-        
-    
-    ### Plot against nonearninc ###
-        plot(x=cps_adults$nonearninc,
-             pch = 20,
-             y = cps_adults$i_partic_hrs,
-             ylim = c(-0.4,1.4),
-             cex.main = 0.9)
-    
-    
-    # Add estimated regression line for nonearninc
-        x1 <- seq(0,90000,1000)
-        y1<- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(1,length(x1))),
-                                                     nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
-                                                     AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                                     i_white = factor(rep(1,length(x1)))),
-                     type='response')
-        
-        y2<- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(1,length(x1))),
-                                                     nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
-                                                     AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                                     i_white = factor(rep(1,length(x1)))),
-                     type='response')
-        
-        y3<- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(0,length(x1))),
-                                                     nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
-                                                     AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                                     i_white = factor(rep(1,length(x1)))),
-                     type='response')
-        
-        y4 <- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(0,length(x1))),
-                                                       nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
-                                                       AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('High-School-Grad',length(x1)),
-                                                       i_white = factor(rep(1,length(x1)))),
-                      type='response')
-        
-            lines(x1, y1, lwd = 1.5, col = "steelblue")
-            lines(x1, y2, lwd = 1.5, col = "red")
-            lines(x1, y3, lwd = 1.5, col = "green")
-            lines(x1, y4, lwd = 1.5, lty = 1, col = "grey")
-                
-        # Add horizontal dashed line and text
-            abline(h = 1, lty = 2, col = "darkred")
-            abline(h = 0, lty = 2, col = "darkred")
-            text(80000, 0.9, cex = 0.5, "Working for wage")
-            text(80000, -0.1, cex= 0.5, "Not working for wage")
-        
-        
-        # Add legend
-            legend('top',
-                   legend = c('Female and child below 6','Female, no child below 6','male,no child below 6','male and child below 6'),
-                   col = c('steelblue','red','green','grey'),
-                   lty = c(1,1,1,1),
-                   cex = 0.5)
-    
+    # # Plot ihs_nonearninc
+    #     plot(x=cps_adults$ihs_nonearninc,
+    #          pch = 20,
+    #          y = cps_adults$i_partic,
+    #          ylim = c(-0.4,1.4),
+    #          cex.main = 0.9)
+    # 
+    # 
+    # # Add estimated regression line for nonearninc
+    #     x1 <- seq(0,max(cps_adults$ihs_nonearninc),0.1)
+    #     y1<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(1,length(x1))),
+    #                                         ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
+    #                                         AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                         i_white = factor(rep(1,length(x1)))),
+    #                 type='response')
+    # 
+    #     y2<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(1,length(x1))),
+    #                                                  ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
+    #                                                  AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                                  i_white = factor(rep(1,length(x1)))),
+    #                  type='response')
+    #     
+    #     y3<- predict(particprob,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(0,length(x1))),
+    #                                                  ihs_nonearninc = x1, ihs_otherfaminc = rep(min(cps_adults$ihs_otherfaminc),length(x1)),
+    #                                                  AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                                  i_white = factor(rep(1,length(x1)))),
+    #                  type='response')
+    #     
+    #     lines(x1, y1, lwd = 1.5, col = "steelblue")
+    #     lines(x1, y2, lwd = 1.5, col = "red")
+    #     lines(x1, y3, lwd = 1.5, col = "green")
+    # 
+    # # Add horizontal dashed line and text
+    #     abline(h = 1, lty = 2, col = "darkred")
+    #     abline(h = 0, lty = 2, col = "darkred")
+    #     text(max(x1), 0.9, cex = 0.5, "Working for wage")
+    #     text(max(x1), -0.1, cex= 0.5, "Not working for wage")
+    # 
+    # 
+    # # Add legend
+    #     legend('topleft',
+    #            horiz = TRUE,
+    #            legend=c('Female and child below 6','Female, no child below 6','male,no child below 6'),
+    #            col = c('steelblue','red','green'),
+    #            lty = c(1,1,1),
+    #            cex = 0.5)
+    #     
+    # 
+    # ### Plot against nonearninc ###
+    #     plot(x=cps_adults$nonearninc,
+    #          pch = 20,
+    #          y = cps_adults$i_partic_hrs,
+    #          ylim = c(-0.4,1.4),
+    #          cex.main = 0.9)
+    # 
+    # 
+    # # Add estimated regression line for nonearninc
+    #     x1 <- seq(0,90000,1000)
+    #     y1<- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(1,length(x1))),
+    #                                                  nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
+    #                                                  AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                                  i_white = factor(rep(1,length(x1)))),
+    #                  type='response')
+    #     
+    #     y2<- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(1,length(x1))),
+    #                                                  nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
+    #                                                  AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                                  i_white = factor(rep(1,length(x1)))),
+    #                  type='response')
+    #     
+    #     y3<- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(0,length(x1))),i_female = factor(rep(0,length(x1))),
+    #                                                  nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
+    #                                                  AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                                  i_white = factor(rep(1,length(x1)))),
+    #                  type='response')
+    #     
+    #     y4 <- predict(particprob3,newdata = data.frame(i_chldb6 = factor(rep(1,length(x1))),i_female = factor(rep(0,length(x1))),
+    #                                                    nonearninc = x1, other_faminc = rep(min(cps_adults$other_faminc),length(x1)),
+    #                                                    AGE = rep(mean(cps_adults$AGE),length(x1)), education = rep('HighSchoolGrad',length(x1)),
+    #                                                    i_white = factor(rep(1,length(x1)))),
+    #                   type='response')
+    #     
+    #         lines(x1, y1, lwd = 1.5, col = "steelblue")
+    #         lines(x1, y2, lwd = 1.5, col = "red")
+    #         lines(x1, y3, lwd = 1.5, col = "green")
+    #         lines(x1, y4, lwd = 1.5, lty = 1, col = "grey")
+    #             
+    #     # Add horizontal dashed line and text
+    #         abline(h = 1, lty = 2, col = "darkred")
+    #         abline(h = 0, lty = 2, col = "darkred")
+    #         text(80000, 0.9, cex = 0.5, "Working for wage")
+    #         text(80000, -0.1, cex= 0.5, "Not working for wage")
+    #     
+    #     
+    #     # Add legend
+    #         legend('top',
+    #                legend = c('Female and child below 6','Female, no child below 6','male,no child below 6','male and child below 6'),
+    #                col = c('steelblue','red','green','grey'),
+    #                lty = c(1,1,1,1),
+    #                cex = 0.5)
+    # 
 
