@@ -26,8 +26,8 @@ library(fastDummies)
 ################################################################################   
 
     
-    cps_ddi_file = 'cps_00006.xml'
-    cps_data_file = 'cps_00006.dat'
+    cps_ddi_file = 'CPSData/cps_00006.xml'
+    cps_data_file = 'CPSData/cps_00006.dat'
     
     cps_ddi <- read_ipums_ddi(cps_ddi_file)
     cps_data <- read_ipums_micro(cps_ddi_file, data_file = cps_data_file)
