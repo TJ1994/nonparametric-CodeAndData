@@ -6,7 +6,8 @@ January 29, 2020
 *******************************************************************************************
 Prerequisites
 *******************************************************************************************
-These files require a working installation of R and Matlab.
+These files require a working installation of R and Matlab. Please unpack the zip container
+CPSData before running the code.
 
 *******************************************************************************************
 Replication
